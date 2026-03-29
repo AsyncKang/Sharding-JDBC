@@ -2,6 +2,7 @@ package com.example.shardingdemo.service;
 
 import com.example.shardingdemo.domain.Order;
 import com.example.shardingdemo.dto.PageResult;
+import com.example.shardingdemo.dto.ShardPreview;
 import com.example.shardingdemo.mapper.OrderMapper;
 import com.example.shardingdemo.sharding.OrderShardingConstants;
 import com.github.pagehelper.PageHelper;
@@ -55,10 +56,20 @@ public class OrderService {
     }
 
     /**
-     * 教学用：与 {@code BoundaryBasedRangeShardingAlgorithm} 单边界两区间一致。
+     * 教学用：分库（INLINE）+ 分表（INLINE，等价原 BOUNDARY_RANGE 边界），与 YAML 推导一致。
      */
-    public String previewPhysicalTable(long userId) {
-        int suffix = userId < OrderShardingConstants.USER_ID_BOUNDARY ? 0 : 1;
-        return "t_order_" + suffix;
+    public ShardPreview previewShard(long userId) {
+        int ds = OrderShardingConstants.databaseSuffix(userId);
+        int tb = OrderShardingConstants.tableSuffix(userId);
+        String dataSource = "ds_" + ds;
+        String physicalTable = "t_order_" + tb;
+        String rule =
+                "分库: INLINE ds_${user_id % 2} → "
+                        + dataSource
+                        + " ; 分表: INLINE t_order_${user_id < "
+                        + OrderShardingConstants.USER_ID_BOUNDARY
+                        + " → t_order_0 else t_order_1 → "
+                        + physicalTable;
+        return new ShardPreview(userId, dataSource, physicalTable, dataSource + "." + physicalTable, rule);
     }
 }

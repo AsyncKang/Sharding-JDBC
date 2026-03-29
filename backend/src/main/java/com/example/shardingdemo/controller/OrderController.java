@@ -2,14 +2,13 @@ package com.example.shardingdemo.controller;
 
 import com.example.shardingdemo.domain.Order;
 import com.example.shardingdemo.dto.PageResult;
+import com.example.shardingdemo.dto.ShardPreview;
 import com.example.shardingdemo.service.OrderService;
 import com.example.shardingdemo.web.PageParam;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
-import java.util.HashMap;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/orders")
@@ -56,13 +55,8 @@ public class OrderController {
     }
 
     @GetMapping("/preview-shard")
-    public Map<String, Object> previewShard(@RequestParam long userId) {
-        String physical = orderService.previewPhysicalTable(userId);
-        Map<String, Object> m = new HashMap<>();
-        m.put("userId", userId);
-        m.put("physicalTable", physical);
-        m.put("rule", "BOUNDARY_RANGE: user_id < 1_000_000_000 -> t_order_0 ; else -> t_order_1");
-        return m;
+    public ShardPreview previewShard(@RequestParam long userId) {
+        return orderService.previewShard(userId);
     }
 
     public record CreateOrderRequest(Long userId, String title, BigDecimal amount) {}

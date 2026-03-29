@@ -1,10 +1,10 @@
 # ShardingSphere-JDBC 学习 Demo（Spring Boot + MyBatis + Vue）
 
-**简介**：Apache ShardingSphere-JDBC 入门示例——单数据源、逻辑表 `t_order` 按 `user_id` 范围分片到两张物理表，集成 MyBatis、PageHelper、Vue 3；适合对照官方文档理解路由改写与分片键设计。
+**简介**：Apache ShardingSphere-JDBC 入门示例——**双库分表**（`demo_sharding_0` / `demo_sharding_1`，每库 `t_order_0` / `t_order_1`，共 4 个物理节点）、逻辑表 `t_order`、分片键 `user_id`（分库、分表均为 **`INLINE`**；分表表达式与原先 `autoTables` + `BOUNDARY_RANGE` 单边界语义一致），集成 MyBatis、PageHelper、Vue 3。
 
 > **名称说明**：常说的「Sharding-JDBC」已并入 **[Apache ShardingSphere](https://shardingsphere.apache.org/)**，以 **`shardingsphere-jdbc`** 形式提供，通过 **`ShardingSphereDriver`** + **`classpath:sharding.yaml`** 接入 Spring Boot（[官方：Spring Boot 与 JDBC 驱动](https://shardingsphere.apache.org/document/current/en/user-manual/shardingsphere-jdbc/yaml-config/jdbc-driver/spring-boot/)）。
 
-本仓库是一个**最小可运行示例**：单库两张物理表、逻辑表 `t_order`、范围分片、分页与 Vue 联调，便于你按下面「学习路径」循序渐进，再深入官方文档。
+本仓库是一个**最小可运行示例**：分库分表、分页与 Vue 联调，便于你按下面「学习路径」循序渐进，再深入官方文档。
 
 ---
 
@@ -27,9 +27,10 @@
 
 | 要点 | 说明 |
 |------|------|
-| 逻辑表 vs 物理表 | SQL/MyBatis 中只出现 **`t_order`**，运行时改写为 **`t_order_0` / `t_order_1`**。 |
-| 分片键 | **`user_id`**，带该条件时可路由到单分片。 |
-| 分片算法 | **`autoTables` + `BOUNDARY_RANGE`**：`user_id < 10^9` → `t_order_0`，否则 → `t_order_1`（边界见 `OrderShardingConstants` 与 `sharding.yaml`）。 |
+| 逻辑表 vs 物理节点 | SQL/MyBatis 中只出现 **`t_order`**，运行时改写为 **`ds_*` 库下的 `t_order_*`**（本例 2 库 × 2 表）。 |
+| 分片键 | **`user_id`**；等值查询带 `user_id` 时可路由到**单一物理节点**。 |
+| 分库 | **`INLINE`**：`ds_${user_id % 2}` → **`ds_0`** / **`ds_1`**（库名 **`demo_sharding_0`** / **`demo_sharding_1`**）。 |
+| 分表 | **`INLINE`**：`t_order_${user_id < 10^9 ? 0 : 1}`（**`BOUNDARY_RANGE` 仅适用于 `autoTables`**，显式 `tables` 须用标准算法如 `INLINE`）。 |
 | 主键 | 逻辑列 **`id`** 由 ShardingSphere **SNOWFLAKE** 生成。 |
 | SQL 观察 | `sharding.yaml` 中 **`sql-show: true`**，控制台可看**改写后的 SQL**。 |
 
@@ -39,21 +40,19 @@
 
 ### 1. 数据库
 
-1. 安装 **MySQL**，创建库：
-
-```sql
-CREATE DATABASE IF NOT EXISTS demo_sharding DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-```
+1. 安装 **MySQL**。脚本会创建 **`demo_sharding_0`**、**`demo_sharding_1`** 两个库，并在各库中建 **`t_order_0`**、**`t_order_1`**。
 
 2. 执行建表脚本（任选一种方式）：
 
 ```bash
-mysql -u root -p demo_sharding < backend/src/main/resources/sql/init.sql
+mysql -u root -p < backend/src/main/resources/sql/init.sql
 ```
 
-或在客户端中打开 **`backend/src/main/resources/sql/init.sql`** 执行。
+或在客户端中打开 **`backend/src/main/resources/sql/init.sql`** 整段执行。
 
-3. 修改 **`backend/src/main/resources/sharding.yaml`** 中 **`jdbcUrl` / `username` / `password`**，与本地 MySQL 一致。
+3. 修改 **`backend/src/main/resources/sharding.yaml`** 中两个数据源 **`ds_0` / `ds_1`** 的 **`jdbcUrl` / `username` / `password`**，与本地 MySQL 一致。
+
+若你此前使用旧版**单库** `demo_sharding`，请改用新库名或自行迁移数据到新结构。
 
 ### 2. 后端
 
@@ -88,24 +87,25 @@ npm run dev
 
 ### 第一阶段：概念与接入
 
-1. **为什么需要中间件**：单表过大 → 拆成多张**物理表**；应用仍希望只写一张**逻辑表**，由中间件做路由与改写。
+1. **为什么需要中间件**：单库单表过大 → **分库分表**；应用仍希望只写一张**逻辑表**，由中间件做路由与改写。
 2. **读 `application.yml`**：`spring.datasource` 使用 **`org.apache.shardingsphere.driver.ShardingSphereDriver`**，`url` 指向 **`jdbc:shardingsphere:classpath:sharding.yaml`**。
 3. **读官方概念**：[数据分片](https://shardingsphere.apache.org/document/current/en/features/sharding/)、[核心概念（表、分片键、分片算法）](https://shardingsphere.apache.org/document/current/en/features/sharding/concept/)。
 
 ### 第二阶段：分片配置（本仓库核心）
 
 1. **读 `sharding.yaml`**：  
-   - **`dataSources`**：真实 JDBC 连接（本例单数据源 `ds_0`）。  
-   - **`rules: !SHARDING`** → **`autoTables.t_order`**：自动映射物理表名。  
-   - **`shardingAlgorithms`**：`BOUNDARY_RANGE` 与 **`sharding-ranges`**。  
+   - **`dataSources`**：`ds_0`、`ds_1` 两个真实 JDBC 连接。  
+   - **`rules: !SHARDING`** → **`tables.t_order`**：`actualDataNodes: ds_${0..1}.t_order_${0..1}`。  
+   - **`databaseStrategy`**：`INLINE`（`ds_${user_id % 2}`）；**`tableStrategy`**：`INLINE`（与单边界范围分片等价）。  
    - **`keyGenerators.snowflake`**：分布式主键。  
-   - **`props.sql-show`**：打印逻辑 SQL 与改写结果。
-2. **对照常量**：`com.example.shardingdemo.sharding.OrderShardingConstants` 与 YAML 边界一致，用于预览接口与前端展示。
+   - **`props.sql-show`**：打印逻辑 SQL 与改写结果。  
+   官方组合示例见 [Sharding YAML - Sample](https://shardingsphere.apache.org/document/5.5.2/en/user-manual/common-config/builtin-algorithm/sharding/)。
+2. **对照常量**：`OrderShardingConstants`（`DATABASE_COUNT`、`USER_ID_BOUNDARY`）与 YAML 一致，用于 **`ShardPreview`** 与前端推导。
 
 ### 第三阶段：业务 SQL 与运行时现象
 
 1. **读 `mapper/OrderMapper.xml`**：表名一律为逻辑表 **`t_order`**，不要写 `t_order_0`。
-2. **启动后操作**：插入订单、列表分页、带/不带 `user_id` 查询；观察控制台 **路由到哪些表**、跨分片时 **如何合并**。
+2. **启动后操作**：插入订单、列表分页、带/不带 `user_id` 查询；观察控制台 **路由到哪个库、哪张表**、跨分片时 **如何合并**（本例全表分页最多涉及 **4** 个节点）。
 3. **分页**：使用 PageHelper；跨分片 + 排序 + 深分页成本高，体会「尽量带分片键」的意义。
 
 ### 第四阶段：工程化与其它主题
@@ -123,8 +123,10 @@ npm run dev
 
 ## 分片规则摘要（与 `sharding.yaml` 一致）
 
-- **`autoTables`** + **`BOUNDARY_RANGE`**，`sharding-ranges: 1000000000` → 两区间对应 **`t_order_0`**、**`t_order_1`**。
-- 扩容：增加边界与物理表、做数据迁移；或评估 **`VOLUME_RANGE`** 等算法（见官方[内置分片算法](https://shardingsphere.apache.org/document/current/en/user-manual/common-config/builtin-algorithm/sharding/)）。
+- **分库**：**`INLINE`** `algorithm-expression: ds_${user_id % 2}` → **`ds_0`** / **`ds_1`**。  
+- **分表**：**`INLINE`** `t_order_${user_id < 1000000000 ? 0 : 1}` → **`t_order_0`** / **`t_order_1`**（与 `autoTables` 下的 **`BOUNDARY_RANGE`** 单边界语义相同；后者不能用于 `tables` 规则）。  
+- **物理节点**：**`ds_0.t_order_0`**、**`ds_0.t_order_1`**、**`ds_1.t_order_0`**、**`ds_1.t_order_1`**。  
+- **扩容**：加库需新增数据源、`actualDataNodes` 与分库算法；加表需调整边界或区间并做数据迁移；详见官方[内置分片算法](https://shardingsphere.apache.org/document/current/en/user-manual/common-config/builtin-algorithm/sharding/)。
 
 ---
 

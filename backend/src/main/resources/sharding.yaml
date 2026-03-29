@@ -1,13 +1,21 @@
-# ShardingSphere-JDBC：逻辑表 t_order → 物理表 t_order_0、t_order_1（autoTables + 范围分片）
+# ShardingSphere-JDBC：逻辑表 t_order → 分库分表
+# 数据源：ds_0、ds_1（对应库 demo_sharding_0、demo_sharding_1）
 # 分片键：user_id
-# 算法：BOUNDARY_RANGE — 见 sharding-ranges（与 OrderShardingConstants.USER_ID_BOUNDARY 保持一致）
-# 扩容：新增边界即多一个区间，可配合新增物理表 t_order_2… 与迁移脚本
+# 分库：INLINE — ds_${user_id % 2}
+# 分表：INLINE（与 OrderShardingConstants.USER_ID_BOUNDARY 一致；BOUNDARY_RANGE 仅可用于 autoTables，tables 规则须用标准算法）
+# 共 2×2=4 个物理节点：ds_0.t_order_0、ds_0.t_order_1、ds_1.t_order_0、ds_1.t_order_1
 
 dataSources:
   ds_0:
     dataSourceClassName: com.zaxxer.hikari.HikariDataSource
     driverClassName: com.mysql.cj.jdbc.Driver
-    jdbcUrl: jdbc:mysql://127.0.0.1:3306/demo_sharding?useSSL=false&serverTimezone=UTC&characterEncoding=utf8&allowPublicKeyRetrieval=true
+    jdbcUrl: jdbc:mysql://127.0.0.1:3306/demo_sharding_0?useSSL=false&serverTimezone=UTC&characterEncoding=utf8&allowPublicKeyRetrieval=true
+    username: root
+    password: 12345678
+  ds_1:
+    dataSourceClassName: com.zaxxer.hikari.HikariDataSource
+    driverClassName: com.mysql.cj.jdbc.Driver
+    jdbcUrl: jdbc:mysql://127.0.0.1:3306/demo_sharding_1?useSSL=false&serverTimezone=UTC&characterEncoding=utf8&allowPublicKeyRetrieval=true
     username: root
     password: 12345678
 
@@ -16,19 +24,27 @@ rules:
     defaultKeyGenerateStrategy:
       column: id
       keyGeneratorName: snowflake
-    autoTables:
+    tables:
       t_order:
-        actualDataSources: ds_0
-        shardingStrategy:
+        actualDataNodes: ds_${0..1}.t_order_${0..1}
+        databaseStrategy:
           standard:
             shardingColumn: user_id
-            shardingAlgorithmName: t_order_boundary_range
+            shardingAlgorithmName: order_database_inline
+        tableStrategy:
+          standard:
+            shardingColumn: user_id
+            shardingAlgorithmName: t_order_table_inline
     shardingAlgorithms:
-      t_order_boundary_range:
-        type: BOUNDARY_RANGE
+      order_database_inline:
+        type: INLINE
         props:
-          # 单个边界 → 两区间：[min, boundary) 与 [boundary, +∞)；对应 t_order_0、t_order_1
-          sharding-ranges: 1000000000
+          algorithm-expression: ds_${user_id % 2}
+      # 等价于 autoTables 下的 BOUNDARY_RANGE（单边界 10^9）：< 边界 → t_order_0，否则 → t_order_1
+      t_order_table_inline:
+        type: INLINE
+        props:
+          algorithm-expression: "t_order_${user_id < 1000000000 ? 0 : 1}"
     keyGenerators:
       snowflake:
         type: SNOWFLAKE

@@ -1,12 +1,13 @@
 <template>
   <div class="page">
     <header>
-      <h1>ShardingSphere-JDBC 单库分表示例</h1>
+      <h1>ShardingSphere-JDBC 分库分表示例</h1>
       <p class="sub">
-        逻辑表 <code>t_order</code> → 物理表 <code>t_order_0</code> / <code>t_order_1</code>，
-        分片键 <code>user_id</code>，规则：<code>BOUNDARY_RANGE</code>（边界
-        <code>1_000_000_000</code>：小于 → <code>t_order_0</code>，大于等于 → <code>t_order_1</code>）。控制台可看到 SQL
-        改写（<code>sql-show: true</code>）。
+        逻辑表 <code>t_order</code> → 两个库 <code>demo_sharding_0</code> / <code>demo_sharding_1</code>（数据源
+        <code>ds_0</code> / <code>ds_1</code>），每库两张表 <code>t_order_0</code>、<code>t_order_1</code>，共 4 个物理节点。
+        分片键 <code>user_id</code>：<strong>分库</strong>
+        <code>INLINE</code>（<code>ds_${user_id % 2}</code>）；
+        <strong>分表</strong> <code>INLINE</code>（<code>t_order_${user_id &lt; 1e9 ? 0 : 1}</code>，与单边界范围分片等价）。控制台可看 SQL 改写。
       </p>
     </header>
 
@@ -55,7 +56,7 @@
         <tr>
           <th>id</th>
           <th>userId</th>
-          <th>物理表（推导）</th>
+          <th>物理节点（推导）</th>
           <th>title</th>
           <th>amount</th>
           <th>createTime</th>
@@ -65,7 +66,7 @@
         <tr v-for="o in orders" :key="o.id + '-' + o.userId">
           <td>{{ o.id }}</td>
           <td>{{ o.userId }}</td>
-          <td><code>t_order_{{ shardSuffix(o.userId) }}</code></td>
+          <td><code>{{ physicalNode(o.userId) }}</code></td>
           <td>{{ o.title }}</td>
           <td>{{ o.amount }}</td>
           <td>{{ o.createTime }}</td>
@@ -85,9 +86,21 @@ const api = axios.create({ baseURL: '/api' })
 
 /** 与 backend OrderShardingConstants / sharding.yaml 一致 */
 const USER_ID_BOUNDARY = 1000000000
+const DATABASE_COUNT = 2
 
-function shardSuffix(userId) {
+function databaseSuffix(userId) {
+  const u = Math.trunc(Number(userId))
+  return ((u % DATABASE_COUNT) + DATABASE_COUNT) % DATABASE_COUNT
+}
+
+function tableSuffix(userId) {
   return Number(userId) < USER_ID_BOUNDARY ? 0 : 1
+}
+
+function physicalNode(userId) {
+  const d = databaseSuffix(userId)
+  const t = tableSuffix(userId)
+  return `ds_${d}.t_order_${t}`
 }
 
 const form = reactive({
@@ -109,7 +122,7 @@ const message = ref('')
 const shardHint = computed(() => {
   const u = Number(form.userId)
   if (Number.isNaN(u)) return ''
-  return `→ 物理表 t_order_${shardSuffix(u)}`
+  return `→ ${physicalNode(u)}`
 })
 
 async function refreshShardPreview() {
@@ -117,7 +130,7 @@ async function refreshShardPreview() {
     const u = Number(form.userId)
     if (Number.isNaN(u)) return
     const { data } = await api.get('/orders/preview-shard', { params: { userId: u } })
-    message.value = `预览：userId=${data.userId} → ${data.physicalTable}`
+    message.value = `预览：userId=${data.userId} → ${data.actualDataNode}`
   } catch {
     /* 忽略预览失败 */
   }
@@ -139,7 +152,7 @@ async function submit() {
       title: form.title,
       amount: Number(form.amount)
     })
-    message.value = `创建成功，id=${data.id}，请查看后端日志中的实际 SQL（表名应为 t_order_${shardSuffix(Number(form.userId))}）`
+    message.value = `创建成功，id=${data.id}，请查看后端日志（节点应为 ${physicalNode(Number(form.userId))}）`
     await loadPage(1, onlyUser.value)
   } catch (e) {
     message.value = e.response?.data?.message || String(e)

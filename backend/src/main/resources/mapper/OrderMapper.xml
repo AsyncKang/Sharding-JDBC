@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.shardingdemo.mapper.OrderMapper">
+
+    <resultMap id="BaseResultMap" type="com.example.shardingdemo.domain.Order">
+        <id column="id" property="id"/>
+        <result column="user_id" property="userId"/>
+        <result column="title" property="title"/>
+        <result column="amount" property="amount"/>
+        <result column="create_time" property="createTime" typeHandler="org.apache.ibatis.type.InstantTypeHandler"/>
+    </resultMap>
+
+    <!-- 始终使用逻辑表名 t_order，由 ShardingSphere 改写为物理表 -->
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO t_order (user_id, title, amount, create_time)
+        VALUES (#{userId}, #{title}, #{amount}, #{createTime})
+    </insert>
+
+    <select id="selectByIdAndUserId" resultMap="BaseResultMap">
+        SELECT id, user_id, title, amount, create_time
+        FROM t_order
+        WHERE id = #{id} AND user_id = #{userId}
+    </select>
+
+    <!-- 无分片键：全路由，ShardingSphere 会按 ORDER BY 做有序归并；再按 id 保证同毫秒下的顺序稳定 -->
+    <select id="selectAll" resultMap="BaseResultMap">
+        SELECT id, user_id, title, amount, create_time
+        FROM t_order
+        ORDER BY create_time DESC, id DESC
+    </select>
+
+    <select id="selectByUserId" resultMap="BaseResultMap">
+        SELECT id, user_id, title, amount, create_time
+        FROM t_order
+        WHERE user_id = #{userId}
+        ORDER BY create_time DESC, id DESC
+    </select>
+</mapper>

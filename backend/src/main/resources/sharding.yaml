@@ -1,0 +1,37 @@
+# ShardingSphere-JDBC：逻辑表 t_order → 物理表 t_order_0、t_order_1（autoTables + 范围分片）
+# 分片键：user_id
+# 算法：BOUNDARY_RANGE — 见 sharding-ranges（与 OrderShardingConstants.USER_ID_BOUNDARY 保持一致）
+# 扩容：新增边界即多一个区间，可配合新增物理表 t_order_2… 与迁移脚本
+
+dataSources:
+  ds_0:
+    dataSourceClassName: com.zaxxer.hikari.HikariDataSource
+    driverClassName: com.mysql.cj.jdbc.Driver
+    jdbcUrl: jdbc:mysql://127.0.0.1:3306/demo_sharding?useSSL=false&serverTimezone=UTC&characterEncoding=utf8&allowPublicKeyRetrieval=true
+    username: root
+    password: 12345678
+
+rules:
+  - !SHARDING
+    defaultKeyGenerateStrategy:
+      column: id
+      keyGeneratorName: snowflake
+    autoTables:
+      t_order:
+        actualDataSources: ds_0
+        shardingStrategy:
+          standard:
+            shardingColumn: user_id
+            shardingAlgorithmName: t_order_boundary_range
+    shardingAlgorithms:
+      t_order_boundary_range:
+        type: BOUNDARY_RANGE
+        props:
+          # 单个边界 → 两区间：[min, boundary) 与 [boundary, +∞)；对应 t_order_0、t_order_1
+          sharding-ranges: 1000000000
+    keyGenerators:
+      snowflake:
+        type: SNOWFLAKE
+
+props:
+  sql-show: true

@@ -2,11 +2,8 @@ package com.example.shardingdemo.config;
 
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.databind.DeserializationContext;
-import com.fasterxml.jackson.databind.JsonDeserializer;
-import com.fasterxml.jackson.databind.JsonSerializer;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.datatype.jsr310.deser.LocalDateDeserializer;
 import com.fasterxml.jackson.datatype.jsr310.deser.LocalDateTimeDeserializer;
 import com.fasterxml.jackson.datatype.jsr310.deser.LocalTimeDeserializer;
@@ -25,12 +22,6 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.TimeZone;
 
-/**
- * 全局时间序列化。
- * <p>
- * {@link Instant}：数据语义为 UTC；JSON 输出为东八区墙钟 {@code yyyy-MM-dd HH:mm:ss}；反序列化按同一时间串解析为东八区再转 {@link Instant}。
- * </p>
- */
 @Configuration
 public class JacksonConfig {
 
@@ -49,16 +40,23 @@ public class JacksonConfig {
         return builder -> {
             builder.timeZone(TimeZone.getTimeZone(DISPLAY_ZONE));
             builder.featuresToDisable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-            builder.serializers(
-                    new InstantJsonSerializer(),
-                    new LocalDateTimeSerializer(DATE_TIME_FMT),
-                    new LocalDateSerializer(DATE_FMT),
-                    new LocalTimeSerializer(TIME_FMT));
-            builder.deserializers(
-                    new InstantJsonDeserializer(),
-                    new LocalDateTimeDeserializer(DATE_TIME_FMT),
-                    new LocalDateDeserializer(DATE_FMT),
-                    new LocalTimeDeserializer(TIME_FMT));
+
+            // ========== 修复点：使用 SimpleModule 注册序列化器 ==========
+            SimpleModule module = new SimpleModule();
+
+            // 序列化
+            module.addSerializer(Instant.class, new InstantJsonSerializer());
+            module.addSerializer(LocalDateTime.class, new LocalDateTimeSerializer(DATE_TIME_FMT));
+            module.addSerializer(java.time.LocalDate.class, new LocalDateSerializer(DATE_FMT));
+            module.addSerializer(java.time.LocalTime.class, new LocalTimeSerializer(TIME_FMT));
+
+            // 反序列化
+            module.addDeserializer(Instant.class, new InstantJsonDeserializer());
+            module.addDeserializer(LocalDateTime.class, new LocalDateTimeDeserializer(DATE_TIME_FMT));
+            module.addDeserializer(java.time.LocalDate.class, new LocalDateDeserializer(DATE_FMT));
+            module.addDeserializer(java.time.LocalTime.class, new LocalTimeDeserializer(TIME_FMT));
+
+            builder.modules(module);
         };
     }
 

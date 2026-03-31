@@ -17,9 +17,11 @@ import java.util.List;
 public class OrderService {
 
     private final OrderMapper orderMapper;
+    private final OrderEsQueryService orderEsQueryService;
 
-    public OrderService(OrderMapper orderMapper) {
+    public OrderService(OrderMapper orderMapper, OrderEsQueryService orderEsQueryService) {
         this.orderMapper = orderMapper;
+        this.orderEsQueryService = orderEsQueryService;
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -41,9 +43,7 @@ public class OrderService {
      * 跨分片分页（无 userId）：ShardingSphere 会对各分片改写 LIMIT 并合并，深分页成本高。
      */
     public PageResult<Order> pageAll(int pageNum, int pageSize) {
-        PageHelper.startPage(pageNum, pageSize);
-        List<Order> list = orderMapper.selectAll();
-        return PageResult.of(new PageInfo<>(list));
+        return orderEsQueryService.pageAll(pageNum, pageSize);
     }
 
     /**

@@ -1,22 +1,30 @@
-package com.example.shardingdemo.domain;
+package com.example.shardingdemo.es;
 
 import org.springframework.data.annotation.Id;
+import org.springframework.data.elasticsearch.annotations.DateFormat;
 import org.springframework.data.elasticsearch.annotations.Document;
+import org.springframework.data.elasticsearch.annotations.Field;
+import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 
-/**
- * 逻辑表 t_order。{@link #createTime} 使用 UTC 时刻（{@link Instant}），与库中 TIMESTAMP（UTC 存储）一致；
- * REST JSON 由 {@link com.example.shardingdemo.config.JacksonConfig} 格式化为东八区 {@code yyyy-MM-dd HH:mm:ss}。
- */
+@Document(indexName = "order")
+public class EsOrderDoc {
 
-public class Order {
-
+    @Id
     private Long id;
+
+    @Field(type = FieldType.Long)
     private Long userId;
+
+    @Field(type = FieldType.Keyword)
     private String title;
+
+    @Field(type = FieldType.Double)
     private BigDecimal amount;
+
+    @Field(type = FieldType.Date, format = DateFormat.date_time)
     private Instant createTime;
 
     public Long getId() {

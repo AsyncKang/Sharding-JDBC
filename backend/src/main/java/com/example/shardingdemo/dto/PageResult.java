@@ -1,6 +1,7 @@
 package com.example.shardingdemo.dto;
 
 import com.github.pagehelper.PageInfo;
+import org.springframework.data.domain.Page;
 
 import java.util.List;
 
@@ -16,5 +17,14 @@ public record PageResult<T>(long total, int pageNum, int pageSize, int pages, Li
                 pageInfo.getPageSize(),
                 pageInfo.getPages(),
                 pageInfo.getList());
+    }
+
+    public static <T> PageResult<T> of(Page<T> page) {
+        return new PageResult<>(
+                page.getTotalElements(),
+                page.getNumber() + 1,
+                page.getSize(),
+                page.getTotalPages(),
+                page.getContent());
     }
 }

@@ -1,5 +1,7 @@
 package com.example.shardingdemo.domain;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.elasticsearch.annotations.Document;
 
@@ -13,7 +15,9 @@ import java.time.Instant;
 
 public class Order {
 
+    @JsonSerialize(using = ToStringSerializer.class)
     private Long id;
+    @JsonSerialize(using = ToStringSerializer.class)
     private Long userId;
     private String title;
     private BigDecimal amount;

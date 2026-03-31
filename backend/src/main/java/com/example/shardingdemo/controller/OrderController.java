@@ -5,10 +5,12 @@ import com.example.shardingdemo.dto.PageResult;
 import com.example.shardingdemo.dto.ShardPreview;
 import com.example.shardingdemo.service.OrderService;
 import com.example.shardingdemo.web.PageParam;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 
 @RestController
 @RequestMapping("/api/orders")
@@ -52,6 +54,19 @@ public class OrderController {
             return orderService.pageByUser(userId, pn, ps);
         }
         return orderService.pageAll(pn, ps);
+    }
+
+    @GetMapping("/es")
+    public PageResult<Order> searchByEs(
+            @RequestParam(required = false) Long userId,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant startTime,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant endTime,
+            @RequestParam(required = false) Integer pageNum,
+            @RequestParam(required = false) Integer pageSize) {
+        int pn = PageParam.normalizePageNum(pageNum);
+        int ps = PageParam.normalizePageSize(pageSize);
+        return orderService.searchByEs(userId, keyword, startTime, endTime, pn, ps);
     }
 
     @GetMapping("/preview-shard")

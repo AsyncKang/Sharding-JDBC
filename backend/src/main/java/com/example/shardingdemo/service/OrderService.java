@@ -46,6 +46,16 @@ public class OrderService {
         return orderEsQueryService.pageAll(pageNum, pageSize);
     }
 
+    public PageResult<Order> searchByEs(
+            Long userId,
+            String keyword,
+            Instant startTime,
+            Instant endTime,
+            int pageNum,
+            int pageSize) {
+        return orderEsQueryService.search(userId, keyword, startTime, endTime, pageNum, pageSize);
+    }
+
     /**
      * 单分片分页（带 userId）：仅路由到一个物理表，与普通单表分页一致。
      */
